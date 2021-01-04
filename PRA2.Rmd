@@ -27,15 +27,21 @@ El dataset utilizado en esta práctica es "Avocado Prices". Este dataset almacen
 
 El dataset está compuesto de 14 columnas descritas a continuación:
 
+* X - Numeracion
 * Date - Fecha de la observación
 * AveragePrice - Precio medio de un aguacate.
-* type - convencional o orgánico
-* year - Año
-* Region - Ciudad o región
+* type - convencional o orgánico.
+* year - Año.
+* Region - Ciudad o región.
 * Total Volume - Número total de aguacates vendidos.
-* 4046 - Número de aguacates PLU 4046 vendidos
-* 4225 - Número de aguacates PLU 4225 vendidos
-* 4770 - Número de aguacates PLU 4770 vendidos
+* 4046 - Número de aguacates PLU 4046 vendidos.
+* 4225 - Número de aguacates PLU 4225 vendidos.
+* 4770 - Número de aguacates PLU 4770 vendidos.
+* Total.Bags - Numero total de Bolsas
+* Small.Bags
+* Large.Bags
+* XLarge.Bags
+
 
 ```{r}
 library(dplyr)
@@ -43,11 +49,19 @@ library(ggplot2)
 data <- read.csv("avocado.csv", header=TRUE, sep=",")
 ```
 
+El dataframe obtenido, se resume que hay unas 14 variables, con mas de 18.000 filas.
+
 ```{r}
 dim(data)
 numFilas = dim(data)[1]
 numCols = dim(data)[2]
 ```
+
+Como se puede observar que algunas variables, se han indicado con el tipo incorrecto:
+
+* Date - Deberia ser el tipo fecha (Date)
+* Region - Se podria indicar a modo de factor para que sea mas facil su analisis.
+* Type - Tipo factor para facilitar su analisis.
 
 
 ```{r}
@@ -60,6 +74,8 @@ summary(data)
 ```
 
 
+En los tipos factor, podemos confirmar que no hay ningun elemento diferente a lo que se habia observado en un primer analisis via el csv.
+
 ```{r}
 unique(data$type)
 ```
@@ -69,11 +85,13 @@ unique(data$type)
 unique(data$region)
 ```
 
+Ademas, en ninguna de las otras variables no hay ningun NA
 
 ```{r}
 colSums(is.na(data))
 ```
 
+Tal y como se ha indicado, transformamos las variables type y region en factores.
 ```{r}
 data$type <- as.factor(data$type)
 data$region <- as.factor(data$region)
@@ -86,6 +104,8 @@ summary(data$region)
 ```{r}
 summary(data$type)
 ```
+
+Transformamos la variable Date del tipo character a Date. Ademas, tambien creamos una nueva variable Month para visualizar mejor la evolucion en los distintos meses.
 
 ```{r}
 fechas <- as.Date(data$Date, format="%Y-%m-%d")
@@ -102,22 +122,33 @@ head(data$Month)
 summary(data)
 ```
 
+Por ultimo, eliminamos la variable X debido a que no ofrecia ninguna informacion relevante.
+
 ```{r}
-data <- select(data, c(-X, -year))
+data <- select(data, -X,)
 ```
+
+Despues de este tratamiento de los datos, se ha observado como hay una gran cantidad de XLarge Bags con 0, es por ello que es necesario revisar si hay algun problema con dicha variable.
+
 
 ```{r}
 summary(data)
 ```
 
+Con el siguiente boxplot, se puede visualizar que casi todos los datos se encuentran entre el 0 y el 300.
+
 ```{r}
 boxplot(data$XLarge.Bags, notch = TRUE)
 ```
+
+Se aprecia como todos tienen como "Region" a TotalUS, por lo cual, sera necesario eliminar estas filas.
 
 ```{r}
 datos <- arrange(data, -XLarge.Bags)
 head(datos,50)
 ```
+
+Con el siguiente codigo, se eliminan las filas donde se incluye TotalUS
 
 ```{r}
 data <- data[data$region != "TotalUS",]
@@ -141,17 +172,19 @@ head(datos,50)
 
 # Análisis de los datos.
 ## Selección de los grupos
-Realizaremos la comparación de los atributos:
+
+En este caso, seria interesante ver algunas observaciones como por ejemplo:
+
+* La diferencia de precio y su evolucion entre los aguacates convencionales y los organicos.
+* Si hay diferencia entre la compra de bolsas entre los aguantes de convencionales y organicos.
+* Evolucion en la compra de los aguacates.
 - 
 
 ## Comprobación de la normalidad y homogeneidad de la varianza
 
+A continuacion, comprobaremos si las variables numericas tienen a la normalidad. Para ello, utilizaremos el test de Kolomogorv-Smirnov.
+Concretamente, se utiliza el test Lilliefors, este test sume que la media y varianza son desconocidas, estando especialmente desarrollado para contrastar la normalidad. Es la alternativa al test de Shapiro-Wilk cuando el número de observaciones es mayor de 50.
 
-```{r}
-numeric_attr <- dplyr::select_if(data, is.numeric)
-sample_5000 <- sample(numeric_attr, 5000, replace=TRUE)
-#lapply(sample_5000, shapiro.test)
-```
 
 ```{r}
 library("nortest")
@@ -159,16 +192,29 @@ numeric_attr <- dplyr::select_if(data, is.numeric)
 lapply(numeric_attr, lillie.test)
 ```
 
+En ello, se obseva que todas las variables las podemos considerar como normales, con un p-value practicamente 0. Esto se podria confirmar observando algunas de las variables:
+
+```{r}
+hist(data$AveragePrice)
+```
+```{r}
+hist(data$Total.Volume)
+```
+En un primer momento, comparamos las varianzas de las variables del numero de bolsas respecto a los aguacates organicos y convencionales.
+
 ```{r}
 a <- data[data$type == "conventional", "Total.Bags"]
 b <- data[data$type == "organic", "Total.Bags"]
 var.test(a,b)
 ```
 
+Observamos, con un pvalue practicamente a 0, que las varianzas son diferentes. Esto se puede observar realizando un boxplot:
+
 ```{r}
 boxplot(a, b)
 ```
 
+En el caso del precio medio, tambien hay una diferencia en las varianzas:
 
 ```{r}
 a <- data[data$type == "conventional", "AveragePrice"]
@@ -180,3 +226,112 @@ var.test(a,b)
 boxplot(a, b)
 ```
 
+
+##Aplicación de pruebas estadísticas para comparar los grupos de datos.
+
+### Prueba de Contrastes de hipotesis.
+
+En este caso, podemos indicar que las varianzas de las variables Precio Medio respecto a los diferentos tipos de aguacate son diferentes. Por ello, realizaremos la siguiente hipotesis:
+
+La primera hipotesis es que las ventas de aguacates convencionales es la misma que la de organicos:
+
+$$
+Ho: uCon = uOrg
+$$
+
+$$
+H1: ucon > uOrg
+$$
+
+Observamos que las varianzas son diferentes en las ventas:
+
+```{r}
+var.test( data$Total.Volume[data$type=="conventional"], data$Total.Volume[data$type=="organic"] )
+```
+
+Para ver la hipotesis realizamos el t.test
+```{r}
+t.test( data$Total.Volume[data$type=="conventional"], data$Total.Volume[data$type=="organic"], var.equal=FALSE, alternative = "greater")
+```
+
+Por ello, podemos concluir con un 95% de confianza que las ventas de los aguacates convencionales es superior a las ventas de aguacates organicos.
+Esto es debido al pvalue obtenido, que es practicamente 0. 
+
+
+### Correlacion
+
+
+```{r}
+plot(data$Date, data$AveragePrice, col = "green", main = "Precio durante el tiempo", xlab = "Tiempo", ylab = "Precio")
+```
+
+
+
+En este sentido se observa ciertas correlaciones respecto el precio de los aguacates y en la fecha, donde se puede observar una subida del precio en algunas temporadas a finales de anio.
+
+```{r}
+plot(data$Date[data$type=="conventional"], data$AveragePrice[data$type=="conventional"] , col = "red", main = "Precio durante el tiempo", xlab = "Tiempo", ylab = "Precio")
+```
+
+```{r}
+plot(data$Date[data$type=="organic"], data$AveragePrice[data$type=="organic"] , col = "blue", main = "Precio durante el tiempo", xlab = "Tiempo", ylab = "Precio")
+```
+Se observa como el precio de los aguacates organicos es mas estable que el de los aguacates convencionales. Sin embargo, no se observa una ninguna corelacion respecto diferentes fechas con la subida o bajada de precios. Por lo cual debemos suponer que el aumento de precio se trata de otros tipos de factores ajenos a los incluidos en este datasate.
+
+
+```{r}
+plot(data$Total.Volume, data$AveragePrice , col = "Green", main = "Precio vs Num de Ventas", xlab = "Numero de Ventas", ylab = "Precio")
+```
+Por otro lado, como era de esperar, a medida que el numero de ventas crece, el precio tiende a estabilizarse y bajar. Siendo en momentos donde las ventas soy muy menores el precio del aguacate, independientemente del tipo es muy dispar.
+
+```{r}
+plot(data$Total.Volume[data$type=="conventional"], data$AveragePrice[data$type=="conventional"] , col = "red", main = "Precio vs Num de Ventas", xlab = "Numero de Ventas", ylab = "Precio")
+```
+
+```{r}
+plot(data$Total.Volume[data$type=="organic"], data$AveragePrice[data$type=="organic"] , col = "blue", main = "Precio vs Num de Ventas", xlab = "Numero de Ventas", ylab = "Precio")
+```
+
+Se observan diferencias respecto en cuanto las ventas son mayores, en el caso de los organicos, este precio tiene a situarse en la mediana, sin embargo, en el caso de los convencionales, este suele situarse en la parte mas baja, dentro del primer cuartil de precio.
+
+```{r}
+cor.test(data$AveragePrice, data$Total.Volume, method= "spearman")
+```
+Esto se confirma realizadno un test de correlacion, donde nos indica que hay una corelacion negativa de -0.62 entre las dos variables.
+Esto significa, que a medida que aumenta la variable volumen, el precio medio disminiye. 
+
+Esto es igual que lo indicado anteriormente por las imagenes.
+
+Esto es debido a que la gran cantidad de observaciones en el volumen de ventas, se encuentran dentro del rango con pocas ventas el cual  
+
+### Modelo de Regresion
+
+A continuacion, vamos realizar un modelo de regresion y de esta manera observamos los valores que puedan afectar mas al precio de los aguacates.
+
+En un primer momento, se incluyen todas las variables para el calculo del precio de los aguacates, el cual nos indica que es de un R-squared de un 0.57.
+
+```{r}
+summary(lm(AveragePrice~X4046+X4225+X4770+Small.Bags+Large.Bags+XLarge.Bags+type+Date+region, data= data))
+```
+
+Este valor es un poco pobre, debido a que con todas las variable indicadas en este dataset no permitiria predecir cual seria el precio aproximado segun sus caracteristicas. Realizaremos una comprobacion en la cual se podra observar si hay alguna variable que genera "ruido" y que nos permita aumentar su fiabilidad:
+
+
+
+```{r}
+summary(lm(AveragePrice~type+X4046+X4225+X4770+region, data= data))
+```
+
+
+Podemos concluir sin embargo, que no hay ninguna variable en este caso que genere ruido, por lo cual el modelo mas complejo (incluyendo todas las variables) es el que da un mejor rendimiento a la hora de predecir el precio. Sin embargo, cabe destacar que la variable region, es la que mas influencia tiene, seguido del volumen.
+
+Esto es seguramente debido a que, dependiendo de la distancia que tenga que recorrer la mercancia, esta sera mas o menos cara. Sin embargo, con la informacion que tenemos en este dataset no se puede confirmar. Por lo que solamente es una suposicion.
+
+
+
+
+# Conclusiones
+
+* En un primer momento, se ha podido observar como las ventas de los aguacates convencionales son mayores a los aguacates organicos.
+* Se ha detectado que gracias a la correlacion que hay una ligera correlacion negativa entre el precio de los aguacates y el precio de venta, esto afecta sobretodo a los aguacates convencionales. (Mayor Venta, el precio decae)
+* Por ultimo, no hemos podido concluir un buen modelo que prediga el precio medio de los aguacates. Sin embargo, si que se ha detectado una gran influciencia de la region en el precio medio.
